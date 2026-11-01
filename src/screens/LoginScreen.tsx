@@ -39,9 +39,8 @@ export default function LoginScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      const user = await logIn(email, password);
-      // Temporary: the Home screen is added in a later step
-      Alert.alert('Logged in', `Welcome back, ${user.displayName ?? user.email}`);
+      // On success, the navigator moves to Home automatically
+      await logIn(email, password);
     } catch (error) {
       Alert.alert('Login failed', friendlyAuthError(error));
     } finally {

@@ -53,9 +53,8 @@ export default function SignUpScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
+      // On success, the navigator moves to Home automatically
       await signUp(name, email, password);
-      // Temporary: the Home screen is added in a later step
-      Alert.alert('Account created', 'Your account was created successfully.');
     } catch (error) {
       Alert.alert('Sign up failed', friendlyAuthError(error));
     } finally {
