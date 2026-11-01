@@ -9,6 +9,7 @@ import SignUpScreen from '../screens/SignUpScreen';
 import HomeScreen from '../screens/HomeScreen';
 import AddVehicleScreen from '../screens/AddVehicleScreen';
 import VehicleDetailScreen from '../screens/VehicleDetailScreen';
+import LogMaintenanceScreen from '../screens/LogMaintenanceScreen';
 import type { Vehicle } from '../types';
 import { colors } from '../theme/theme';
 
@@ -18,6 +19,7 @@ export type RootStackParamList = {
   Home: undefined;
   AddVehicle: { vehicle?: Vehicle } | undefined;
   VehicleDetail: { vehicleId: string };
+  LogMaintenance: { vehicle: Vehicle };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -58,6 +60,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="AddVehicle" component={AddVehicleScreen} />
             <Stack.Screen name="VehicleDetail" component={VehicleDetailScreen} />
+            <Stack.Screen name="LogMaintenance" component={LogMaintenanceScreen} />
           </>
         ) : (
           <>

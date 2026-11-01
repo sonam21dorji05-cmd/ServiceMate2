@@ -6,8 +6,11 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import AppButton from '../components/AppButton';
 import ScreenHeader from '../components/ScreenHeader';
-import { deleteVehicle, subscribeToVehicle } from '../services/vehicleService';
-import type { Vehicle } from '../types';
+import { deleteVehicleWithRecords, subscribeToVehicle } from '../services/vehicleService';
+import { subscribeToRecords } from '../services/maintenanceService';
+import { iconForService } from '../constants/services';
+import { formatDate, formatMoney } from '../utils/format';
+import type { MaintenanceRecord, Vehicle } from '../types';
 import { colors, fontSize, radius, shadow, spacing } from '../theme/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VehicleDetail'>;
@@ -32,9 +35,32 @@ function InfoRow({
   );
 }
 
+function RecordRow({ record, last }: { record: MaintenanceRecord; last: boolean }) {
+  return (
+    <View style={[styles.recordRow, !last && styles.recordRowBorder]}>
+      <View style={styles.recordIcon}>
+        <MaterialCommunityIcons
+          name={iconForService(record.serviceType)}
+          size={22}
+          color={colors.primary}
+        />
+      </View>
+      <View style={styles.recordInfo}>
+        <Text style={styles.recordTitle}>{record.serviceType}</Text>
+        <Text style={styles.recordMeta}>
+          {formatDate(record.date)} {'\u2022'} {record.odometer.toLocaleString()} km
+        </Text>
+        {!!record.notes && <Text style={styles.recordNotes}>{record.notes}</Text>}
+      </View>
+      {record.cost > 0 && <Text style={styles.recordCost}>{formatMoney(record.cost)}</Text>}
+    </View>
+  );
+}
+
 export default function VehicleDetailScreen({ navigation, route }: Props) {
   const { vehicleId } = route.params;
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [deleting, setDeleting] = useState(false);
   const deletingRef = useRef(false);
 
@@ -54,28 +80,42 @@ export default function VehicleDetailScreen({ navigation, route }: Props) {
     return unsubscribe;
   }, [vehicleId, navigation]);
 
+  // Live maintenance history for this vehicle
+  useEffect(() => {
+    const unsubscribe = subscribeToRecords(
+      vehicleId,
+      (list) => setRecords(list),
+      (error) => console.warn(error)
+    );
+    return unsubscribe;
+  }, [vehicleId]);
+
   const confirmDelete = () => {
     if (!vehicle) return;
-    Alert.alert('Delete vehicle', `Delete ${vehicle.make} ${vehicle.model}? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          deletingRef.current = true;
-          setDeleting(true);
-          try {
-            await deleteVehicle(vehicle.id);
-            navigation.goBack();
-          } catch (error) {
-            console.warn(error);
-            deletingRef.current = false;
-            setDeleting(false);
-            Alert.alert('Could not delete', 'Please check your connection and try again.');
-          }
+    Alert.alert(
+      'Delete vehicle',
+      `Delete ${vehicle.make} ${vehicle.model} and all its maintenance records? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            deletingRef.current = true;
+            setDeleting(true);
+            try {
+              await deleteVehicleWithRecords(vehicle.id);
+              navigation.goBack();
+            } catch (error) {
+              console.warn(error);
+              deletingRef.current = false;
+              setDeleting(false);
+              Alert.alert('Could not delete', 'Please check your connection and try again.');
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   if (!vehicle) {
@@ -89,6 +129,7 @@ export default function VehicleDetailScreen({ navigation, route }: Props) {
   }
 
   const isBike = vehicle.vehicleType === 'motorbike';
+  const totalSpend = records.reduce((sum, r) => sum + (r.cost || 0), 0);
 
   return (
     <View style={styles.root}>
@@ -134,6 +175,13 @@ export default function VehicleDetailScreen({ navigation, route }: Props) {
           />
         </View>
 
+        <View style={styles.primaryAction}>
+          <AppButton
+            title="Log Maintenance"
+            onPress={() => navigation.navigate('LogMaintenance', { vehicle })}
+          />
+        </View>
+
         <View style={styles.actionRow}>
           <AppButton
             title="Edit"
@@ -150,24 +198,37 @@ export default function VehicleDetailScreen({ navigation, route }: Props) {
           />
         </View>
 
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Total spend</Text>
+            <Text style={styles.summaryValue}>{formatMoney(totalSpend)}</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Services</Text>
+            <Text style={styles.summaryValue}>{records.length}</Text>
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Maintenance history</Text>
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="construct-outline" size={30} color={colors.primary} />
+
+          {records.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="construct-outline" size={30} color={colors.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>No records yet</Text>
+              <Text style={styles.emptyText}>
+                Log services like oil changes and tyre rotations to track your history and spend.
+              </Text>
             </View>
-            <Text style={styles.emptyTitle}>No records yet</Text>
-            <Text style={styles.emptyText}>
-              Log services like oil changes and tyre rotations to get automatic reminders.
-            </Text>
-            <AppButton
-              title="Log Maintenance"
-              onPress={() =>
-                Alert.alert('Coming next', 'Logging maintenance is built in the next step.')
-              }
-              style={styles.logButton}
-            />
-          </View>
+          ) : (
+            <View style={styles.recordsCard}>
+              {records.map((record, index) => (
+                <RecordRow key={record.id} record={record} last={index === records.length - 1} />
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -203,13 +264,34 @@ const styles = StyleSheet.create({
   },
   infoLabel: { flex: 1, fontSize: fontSize.sm, color: colors.textSecondary },
   infoValue: { fontSize: fontSize.md, fontWeight: '600', color: colors.text },
+  primaryAction: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
   actionRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  actionButton: { flex: 1 },
+  summaryRow: {
     flexDirection: 'row',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.lg,
   },
-  actionButton: { flex: 1 },
+  summaryCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    ...shadow.card,
+  },
+  summaryLabel: { fontSize: fontSize.sm, color: colors.textSecondary },
+  summaryValue: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: spacing.xs,
+  },
   section: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
   sectionTitle: {
     fontSize: fontSize.md + 2,
@@ -217,6 +299,37 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.md,
   },
+  recordsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    ...shadow.card,
+  },
+  recordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  recordRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  recordIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  recordInfo: { flex: 1 },
+  recordTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
+  recordMeta: { fontSize: fontSize.xs + 1, color: colors.textSecondary, marginTop: 2 },
+  recordNotes: {
+    fontSize: fontSize.xs + 1,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  recordCost: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -241,5 +354,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs + 2,
     lineHeight: 20,
   },
-  logButton: { marginTop: spacing.lg, alignSelf: 'stretch' },
 });

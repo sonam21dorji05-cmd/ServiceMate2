@@ -1,14 +1,15 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   DocumentData,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import type { Vehicle, VehicleInput } from '../types';
@@ -88,6 +89,20 @@ export function updateVehicle(id: string, input: VehicleInput) {
   return updateDoc(doc(db, 'vehicles', id), { ...input });
 }
 
-export function deleteVehicle(id: string) {
-  return deleteDoc(doc(db, 'vehicles', id));
+// Firestore has no cascade delete, so remove the vehicle's records together with it
+export async function deleteVehicleWithRecords(id: string) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Not logged in');
+
+  const recordsQuery = query(
+    collection(db, 'maintenance'),
+    where('ownerId', '==', user.uid),
+    where('vehicleId', '==', id)
+  );
+  const records = await getDocs(recordsQuery);
+
+  const batch = writeBatch(db);
+  records.docs.forEach((record) => batch.delete(record.ref));
+  batch.delete(doc(db, 'vehicles', id));
+  await batch.commit();
 }
