@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,12 +16,22 @@ import AppButton from '../components/AppButton';
 import { auth } from '../services/firebase';
 import { logOut } from '../services/authService';
 import { subscribeToVehicles } from '../services/vehicleService';
-import type { Vehicle } from '../types';
+import { subscribeToAllRecords } from '../services/maintenanceService';
+import { computeAllReminders } from '../utils/reminders';
+import type { MaintenanceRecord, Vehicle } from '../types';
 import { colors, fontSize, radius, shadow, spacing } from '../theme/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
-function VehicleCard({ vehicle, onPress }: { vehicle: Vehicle; onPress: () => void }) {
+function VehicleCard({
+  vehicle,
+  overdueCount,
+  onPress,
+}: {
+  vehicle: Vehicle;
+  overdueCount: number;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
@@ -42,6 +52,11 @@ function VehicleCard({ vehicle, onPress }: { vehicle: Vehicle; onPress: () => vo
           {vehicle.year} {'\u2022'} {vehicle.licensePlate}
         </Text>
         <Text style={styles.vehicleOdometer}>{vehicle.odometer.toLocaleString()} km</Text>
+        {overdueCount > 0 && (
+          <View style={styles.overdueBadge}>
+            <Text style={styles.overdueBadgeText}>{overdueCount} overdue</Text>
+          </View>
+        )}
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
     </Pressable>
@@ -51,6 +66,7 @@ function VehicleCard({ vehicle, onPress }: { vehicle: Vehicle; onPress: () => vo
 export default function HomeScreen({ navigation }: Props) {
   const [name, setName] = useState(auth.currentUser?.displayName ?? '');
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Refresh the profile so the name appears right after sign up
@@ -77,6 +93,26 @@ export default function HomeScreen({ navigation }: Props) {
     return unsubscribe;
   }, []);
 
+  // Live maintenance records, used to work out reminders
+  useEffect(() => {
+    const unsubscribe = subscribeToAllRecords(
+      (list) => setRecords(list),
+      (error) => console.warn(error)
+    );
+    return unsubscribe;
+  }, []);
+
+  const reminders = useMemo(() => computeAllReminders(vehicles, records), [vehicles, records]);
+  const overdueCount = reminders.filter((r) => r.status === 'overdue').length;
+
+  const overdueByVehicle = useMemo(() => {
+    const counts: Record<string, number> = {};
+    reminders.forEach((r) => {
+      if (r.status === 'overdue') counts[r.vehicle.id] = (counts[r.vehicle.id] ?? 0) + 1;
+    });
+    return counts;
+  }, [reminders]);
+
   const firstName = name.trim().split(' ')[0] || 'there';
   const initial = firstName.charAt(0).toUpperCase();
 
@@ -88,6 +124,19 @@ export default function HomeScreen({ navigation }: Props) {
   };
 
   const goToAddVehicle = () => navigation.navigate('AddVehicle');
+  const goToReminders = () => navigation.navigate('Reminders');
+
+  const hasAlert = overdueCount > 0;
+  const bannerTitle = hasAlert
+    ? `${overdueCount} service${overdueCount === 1 ? '' : 's'} overdue`
+    : reminders.length === 0
+    ? 'No reminders yet'
+    : 'All services up to date';
+  const bannerSub = hasAlert
+    ? 'Tap to see what needs attention'
+    : reminders.length === 0
+    ? 'Log a service to start getting reminders'
+    : 'Tap to see upcoming services';
 
   return (
     <View style={styles.root}>
@@ -122,14 +171,50 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.statLabel}>Vehicles</Text>
           </View>
 
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: colors.dangerLight }]}>
-              <Ionicons name="alert-circle-outline" size={20} color={colors.danger} />
+          <Pressable onPress={goToReminders} style={styles.statCard}>
+            <View
+              style={[
+                styles.statIcon,
+                { backgroundColor: hasAlert ? colors.dangerLight : colors.successLight },
+              ]}
+            >
+              <Ionicons
+                name={hasAlert ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+                size={20}
+                color={hasAlert ? colors.danger : colors.success}
+              />
             </View>
-            <Text style={styles.statNumber}>0</Text>
+            <Text style={[styles.statNumber, hasAlert && { color: colors.danger }]}>
+              {overdueCount}
+            </Text>
             <Text style={styles.statLabel}>Overdue</Text>
-          </View>
+          </Pressable>
         </View>
+
+        {vehicles.length > 0 && (
+          <Pressable
+            onPress={goToReminders}
+            style={[styles.banner, hasAlert ? styles.bannerAlert : styles.bannerOk]}
+          >
+            <Ionicons
+              name={hasAlert ? 'alert-circle' : 'checkmark-circle'}
+              size={26}
+              color={hasAlert ? colors.danger : colors.success}
+            />
+            <View style={styles.bannerText}>
+              <Text
+                style={[
+                  styles.bannerTitle,
+                  { color: hasAlert ? colors.danger : colors.success },
+                ]}
+              >
+                {bannerTitle}
+              </Text>
+              <Text style={styles.bannerSub}>{bannerSub}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </Pressable>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Garage</Text>
@@ -156,6 +241,7 @@ export default function HomeScreen({ navigation }: Props) {
               <VehicleCard
                 key={vehicle.id}
                 vehicle={vehicle}
+                overdueCount={overdueByVehicle[vehicle.id] ?? 0}
                 onPress={() => navigation.navigate('VehicleDetail', { vehicleId: vehicle.id })}
               />
             ))
@@ -223,6 +309,20 @@ const styles = StyleSheet.create({
   },
   statNumber: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text },
   statLabel: { fontSize: fontSize.sm, color: colors.textSecondary },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+  },
+  bannerAlert: { backgroundColor: colors.dangerLight, borderColor: '#F5B5B5' },
+  bannerOk: { backgroundColor: colors.successLight, borderColor: '#B9DDBB' },
+  bannerText: { flex: 1, marginLeft: spacing.md },
+  bannerTitle: { fontSize: fontSize.md, fontWeight: '700' },
+  bannerSub: { fontSize: fontSize.xs + 1, color: colors.textSecondary, marginTop: 2 },
   section: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
   sectionTitle: {
     fontSize: fontSize.md + 2,
@@ -258,6 +358,15 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginTop: spacing.xs,
   },
+  overdueBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.dangerLight,
+    borderRadius: radius.pill,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    marginTop: spacing.sm,
+  },
+  overdueBadgeText: { color: colors.danger, fontSize: fontSize.xs, fontWeight: '700' },
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

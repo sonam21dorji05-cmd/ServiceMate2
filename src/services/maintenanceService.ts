@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  DocumentData,
   onSnapshot,
   query,
   serverTimestamp,
@@ -11,6 +12,20 @@ import { auth, db } from './firebase';
 import type { MaintenanceInput, MaintenanceRecord, Vehicle } from '../types';
 
 const recordsRef = collection(db, 'maintenance');
+
+function toRecord(id: string, data: DocumentData): MaintenanceRecord {
+  return {
+    id,
+    ownerId: data.ownerId,
+    vehicleId: data.vehicleId,
+    serviceType: data.serviceType,
+    date: data.date,
+    odometer: data.odometer,
+    cost: data.cost ?? 0,
+    notes: data.notes ?? '',
+    createdAt: data.createdAt?.toMillis?.() ?? Date.now(),
+  };
+}
 
 export async function addMaintenanceRecord(vehicle: Vehicle, input: MaintenanceInput) {
   const user = auth.currentUser;
@@ -54,24 +69,31 @@ export function subscribeToRecords(
   return onSnapshot(
     q,
     (snapshot) => {
-      const records: MaintenanceRecord[] = snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          ownerId: data.ownerId,
-          vehicleId: data.vehicleId,
-          serviceType: data.serviceType,
-          date: data.date,
-          odometer: data.odometer,
-          cost: data.cost ?? 0,
-          notes: data.notes ?? '',
-          createdAt: data.createdAt?.toMillis?.() ?? Date.now(),
-        };
-      });
+      const records = snapshot.docs.map((d) => toRecord(d.id, d.data()));
       // Newest service first
       records.sort((a, b) => b.date - a.date || (b.createdAt ?? 0) - (a.createdAt ?? 0));
       onChange(records);
     },
+    (error) => onError?.(error)
+  );
+}
+
+// Every record the user owns, across all vehicles (used to work out reminders)
+export function subscribeToAllRecords(
+  onChange: (records: MaintenanceRecord[]) => void,
+  onError?: (error: Error) => void
+) {
+  const user = auth.currentUser;
+  if (!user) {
+    onChange([]);
+    return () => {};
+  }
+
+  const q = query(recordsRef, where('ownerId', '==', user.uid));
+
+  return onSnapshot(
+    q,
+    (snapshot) => onChange(snapshot.docs.map((d) => toRecord(d.id, d.data()))),
     (error) => onError?.(error)
   );
 }
