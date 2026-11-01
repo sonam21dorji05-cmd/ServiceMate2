@@ -1,9 +1,8 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import * as FirebaseAuth from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Replace the six values below with the ones from your Firebase console
 const firebaseConfig = {
   apiKey: "AIzaSyA5ZS8cHaVCZ-EElLe6tss-SJR8h9q3ww4",
   authDomain: "servicemate-410fe.firebaseapp.com",
@@ -32,5 +31,15 @@ function createAuth() {
   }
 }
 
+// Auto-detect long polling so Firestore connects reliably from Expo Go
+function createDb() {
+  try {
+    return initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+  } catch {
+    // Firestore was already initialised by a previous reload
+    return getFirestore(app);
+  }
+}
+
 export const auth = createAuth();
-export const db = getFirestore(app);
+export const db = createDb();

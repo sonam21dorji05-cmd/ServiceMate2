@@ -7,12 +7,14 @@ import { auth } from '../services/firebase';
 import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import HomeScreen from '../screens/HomeScreen';
+import AddVehicleScreen from '../screens/AddVehicleScreen';
 import { colors } from '../theme/theme';
 
 export type RootStackParamList = {
   Login: undefined;
   SignUp: undefined;
   Home: undefined;
+  AddVehicle: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -49,7 +51,10 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <>
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="AddVehicle" component={AddVehicleScreen} />
+          </>
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
