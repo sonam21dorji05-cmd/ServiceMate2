@@ -16,7 +16,7 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
 import ScreenHeader from '../components/ScreenHeader';
-import { addVehicle } from '../services/vehicleService';
+import { addVehicle, updateVehicle } from '../services/vehicleService';
 import type { VehicleType } from '../types';
 import { colors, fontSize, radius, spacing } from '../theme/theme';
 
@@ -30,13 +30,16 @@ type Errors = {
   odometer?: string;
 };
 
-export default function AddVehicleScreen({ navigation }: Props) {
-  const [vehicleType, setVehicleType] = useState<VehicleType>('car');
-  const [make, setMake] = useState('');
-  const [model, setModel] = useState('');
-  const [year, setYear] = useState('');
-  const [plate, setPlate] = useState('');
-  const [odometer, setOdometer] = useState('');
+export default function AddVehicleScreen({ navigation, route }: Props) {
+  // If a vehicle was passed in, this screen is in Edit mode
+  const editing = route.params?.vehicle;
+
+  const [vehicleType, setVehicleType] = useState<VehicleType>(editing?.vehicleType ?? 'car');
+  const [make, setMake] = useState(editing?.make ?? '');
+  const [model, setModel] = useState(editing?.model ?? '');
+  const [year, setYear] = useState(editing ? String(editing.year) : '');
+  const [plate, setPlate] = useState(editing?.licensePlate ?? '');
+  const [odometer, setOdometer] = useState(editing ? String(editing.odometer) : '');
   const [errors, setErrors] = useState<Errors>({});
   const [loading, setLoading] = useState(false);
 
@@ -61,16 +64,22 @@ export default function AddVehicleScreen({ navigation }: Props) {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
+    const input = {
+      make: make.trim(),
+      model: model.trim(),
+      year: yearNumber,
+      licensePlate: plate.trim().toUpperCase(),
+      vehicleType,
+      odometer: Number(odometer),
+    };
+
     setLoading(true);
     try {
-      await addVehicle({
-        make: make.trim(),
-        model: model.trim(),
-        year: yearNumber,
-        licensePlate: plate.trim().toUpperCase(),
-        vehicleType,
-        odometer: Number(odometer),
-      });
+      if (editing) {
+        await updateVehicle(editing.id, input);
+      } else {
+        await addVehicle(input);
+      }
       navigation.goBack();
     } catch (error) {
       console.warn(error);
@@ -94,8 +103,10 @@ export default function AddVehicleScreen({ navigation }: Props) {
           showsVerticalScrollIndicator={false}
         >
           <ScreenHeader
-            title="Add vehicle"
-            subtitle="Tell us about your car or motorbike"
+            title={editing ? 'Edit vehicle' : 'Add vehicle'}
+            subtitle={
+              editing ? 'Update the details below' : 'Tell us about your car or motorbike'
+            }
             onBack={() => navigation.goBack()}
           />
 
@@ -191,7 +202,7 @@ export default function AddVehicleScreen({ navigation }: Props) {
             />
 
             <AppButton
-              title="Save Vehicle"
+              title={editing ? 'Save Changes' : 'Save Vehicle'}
               onPress={handleSave}
               loading={loading}
               style={styles.button}

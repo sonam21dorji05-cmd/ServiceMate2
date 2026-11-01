@@ -21,9 +21,12 @@ import { colors, fontSize, radius, shadow, spacing } from '../theme/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
-function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
+function VehicleCard({ vehicle, onPress }: { vehicle: Vehicle; onPress: () => void }) {
   return (
-    <View style={styles.vehicleCard}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.vehicleCard, pressed && styles.vehicleCardPressed]}
+    >
       <View style={styles.vehicleIcon}>
         <MaterialCommunityIcons
           name={vehicle.vehicleType === 'motorbike' ? 'motorbike' : 'car'}
@@ -40,7 +43,8 @@ function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
         </Text>
         <Text style={styles.vehicleOdometer}>{vehicle.odometer.toLocaleString()} km</Text>
       </View>
-    </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+    </Pressable>
   );
 }
 
@@ -148,7 +152,13 @@ export default function HomeScreen({ navigation }: Props) {
               />
             </View>
           ) : (
-            vehicles.map((vehicle) => <VehicleCard key={vehicle.id} vehicle={vehicle} />)
+            vehicles.map((vehicle) => (
+              <VehicleCard
+                key={vehicle.id}
+                vehicle={vehicle}
+                onPress={() => navigation.navigate('VehicleDetail', { vehicleId: vehicle.id })}
+              />
+            ))
           )}
         </View>
       </ScrollView>
@@ -230,6 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     ...shadow.card,
   },
+  vehicleCardPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
   vehicleIcon: {
     width: 56,
     height: 56,
