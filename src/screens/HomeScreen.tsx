@@ -17,6 +17,7 @@ import { auth } from '../services/firebase';
 import { logOut } from '../services/authService';
 import { subscribeToVehicles } from '../services/vehicleService';
 import { subscribeToAllRecords } from '../services/maintenanceService';
+import { syncReminderNotifications } from '../services/notificationService';
 import { computeAllReminders } from '../utils/reminders';
 import type { MaintenanceRecord, Vehicle } from '../types';
 import { colors, fontSize, radius, shadow, spacing } from '../theme/theme';
@@ -68,6 +69,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
 
   // Refresh the profile so the name appears right after sign up
   useEffect(() => {
@@ -96,7 +98,10 @@ export default function HomeScreen({ navigation }: Props) {
   // Live maintenance records, used to work out reminders
   useEffect(() => {
     const unsubscribe = subscribeToAllRecords(
-      (list) => setRecords(list),
+      (list) => {
+        setRecords(list);
+        setRecordsLoaded(true);
+      },
       (error) => console.warn(error)
     );
     return unsubscribe;
@@ -104,6 +109,12 @@ export default function HomeScreen({ navigation }: Props) {
 
   const reminders = useMemo(() => computeAllReminders(vehicles, records), [vehicles, records]);
   const overdueCount = reminders.filter((r) => r.status === 'overdue').length;
+
+  // Keep scheduled notifications in step with the data (once everything has loaded)
+  useEffect(() => {
+    if (loading || !recordsLoaded) return;
+    syncReminderNotifications(reminders);
+  }, [reminders, loading, recordsLoaded]);
 
   const overdueByVehicle = useMemo(() => {
     const counts: Record<string, number> = {};

@@ -5,6 +5,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth } from './firebase';
+import { clearAllNotifications } from './notificationService';
 
 // Turns Firebase's technical error codes into messages a user can read
 export function friendlyAuthError(error: unknown): string {
@@ -40,6 +41,8 @@ export async function logIn(email: string, password: string) {
   return credential.user;
 }
 
-export function logOut() {
+export async function logOut() {
+  // Remove this user's scheduled alerts so they never reach the next account
+  await clearAllNotifications();
   return signOut(auth);
 }
