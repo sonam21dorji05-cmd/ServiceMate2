@@ -1,9 +1,11 @@
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { formatDate } from '../utils/format';
 import type { Reminder } from '../utils/reminders';
 
 const NOTIFIED_KEY = 'servicemate_notified_v1';
+const CHANNEL_ID = 'service-reminders';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ALERT_HOUR = 9; // scheduled alerts arrive at 9:00 AM
 const REPEAT_DAYS = [1, 3, 7, 14]; // re-alerts while a service stays overdue
@@ -18,7 +20,18 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Android needs a channel, and Android 13+ only shows the permission prompt once one exists
+async function ensureAndroidChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+    name: 'Service reminders',
+    importance: Notifications.AndroidImportance.HIGH,
+  });
+}
+
 async function ensurePermission(): Promise<boolean> {
+  await ensureAndroidChannel();
+
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
   if (!current.canAskAgain) return false;
@@ -74,7 +87,7 @@ function soonBody(r: Reminder): string {
 async function sendNow(title: string, body: string, data: Record<string, unknown>) {
   await Notifications.scheduleNotificationAsync({
     content: { title, body, data },
-    trigger: null,
+    trigger: Platform.OS === 'android' ? { channelId: CHANNEL_ID } : null,
   });
 }
 
@@ -86,7 +99,11 @@ async function scheduleAt(
 ) {
   await Notifications.scheduleNotificationAsync({
     content: { title, body, data },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date,
+      channelId: CHANNEL_ID,
+    },
   });
 }
 
