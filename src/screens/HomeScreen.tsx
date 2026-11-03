@@ -14,7 +14,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import AppButton from '../components/AppButton';
 import { auth } from '../services/firebase';
-import { logOut } from '../services/authService';
 import { subscribeToVehicles } from '../services/vehicleService';
 import { subscribeToAllRecords } from '../services/maintenanceService';
 import { syncReminderNotifications } from '../services/notificationService';
@@ -127,15 +126,9 @@ export default function HomeScreen({ navigation }: Props) {
   const firstName = name.trim().split(' ')[0] || 'there';
   const initial = firstName.charAt(0).toUpperCase();
 
-  const handleLogout = () => {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: () => logOut() },
-    ]);
-  };
-
   const goToAddVehicle = () => navigation.navigate('AddVehicle');
   const goToReminders = () => navigation.navigate('Reminders');
+  const goToProfile = () => navigation.navigate('Profile');
 
   const hasAlert = overdueCount > 0;
   const bannerTitle = hasAlert
@@ -160,15 +153,15 @@ export default function HomeScreen({ navigation }: Props) {
       >
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <View style={styles.avatar}>
+            <Pressable onPress={goToProfile} style={styles.avatar}>
               <Text style={styles.avatarText}>{initial}</Text>
-            </View>
+            </Pressable>
             <View style={styles.greetingBox}>
               <Text style={styles.hello}>Hello, {firstName}</Text>
               <Text style={styles.helloSub}>Keep your vehicles in top shape</Text>
             </View>
-            <Pressable onPress={handleLogout} hitSlop={12} style={styles.logoutButton}>
-              <Ionicons name="log-out-outline" size={22} color={colors.white} />
+            <Pressable onPress={goToProfile} hitSlop={12} style={styles.profileButton}>
+              <Ionicons name="person-outline" size={21} color={colors.white} />
             </Pressable>
           </View>
         </View>
@@ -289,7 +282,7 @@ const styles = StyleSheet.create({
   greetingBox: { flex: 1, marginLeft: spacing.md },
   hello: { color: colors.white, fontSize: fontSize.lg, fontWeight: '700' },
   helloSub: { color: colors.primaryLight, fontSize: fontSize.xs + 1, marginTop: 2 },
-  logoutButton: {
+  profileButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
