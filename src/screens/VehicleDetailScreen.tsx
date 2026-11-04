@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -9,6 +17,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import { deleteVehicleWithRecords, subscribeToVehicle } from '../services/vehicleService';
 import { subscribeToRecords } from '../services/maintenanceService';
 import { iconForService } from '../constants/services';
+import { exportMaintenancePdf } from '../utils/exportPdf';
 import { formatDate, formatMoney } from '../utils/format';
 import type { MaintenanceRecord, Vehicle } from '../types';
 import { colors, fontSize, radius, shadow, spacing } from '../theme/theme';
@@ -62,6 +71,7 @@ export default function VehicleDetailScreen({ navigation, route }: Props) {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const deletingRef = useRef(false);
 
   // Live updates: the screen refreshes after an edit, and closes if the vehicle is deleted
@@ -89,6 +99,24 @@ export default function VehicleDetailScreen({ navigation, route }: Props) {
     );
     return unsubscribe;
   }, [vehicleId]);
+
+  const handleExport = async () => {
+    if (!vehicle) return;
+    if (records.length === 0) {
+      Alert.alert('Nothing to export', 'Log at least one service first.');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      await exportMaintenancePdf(vehicle, records);
+    } catch (error) {
+      console.warn(error);
+      Alert.alert('Could not export', 'Something went wrong while creating the PDF.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const confirmDelete = () => {
     if (!vehicle) return;
@@ -210,7 +238,24 @@ export default function VehicleDetailScreen({ navigation, route }: Props) {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Maintenance history</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Maintenance history</Text>
+
+            <Pressable
+              onPress={handleExport}
+              disabled={exporting}
+              style={({ pressed }) => [styles.exportButton, pressed && styles.exportPressed]}
+            >
+              {exporting ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <>
+                  <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+                  <Text style={styles.exportText}>Export PDF</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
 
           {records.length === 0 ? (
             <View style={styles.emptyCard}>
@@ -293,12 +338,30 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   section: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
   sectionTitle: {
     fontSize: fontSize.md + 2,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: spacing.md,
   },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minWidth: 112,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryLight,
+  },
+  exportPressed: { opacity: 0.7 },
+  exportText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '700' },
   recordsCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
