@@ -15,7 +15,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import AppInput from '../components/AppInput';
 import AppButton from '../components/AppButton';
-import { friendlyAuthError, logIn } from '../services/authService';
+import { friendlyAuthError, logIn, sendResetEmail } from '../services/authService';
 import { colors, fontSize, spacing } from '../theme/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
@@ -25,6 +25,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const handleLogin = async () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -45,6 +46,27 @@ export default function LoginScreen({ navigation }: Props) {
       Alert.alert('Login failed', friendlyAuthError(error));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim() || !email.includes('@')) {
+      setErrors({ email: 'Enter your email here, then tap Forgot password' });
+      return;
+    }
+
+    setErrors({});
+    setResetting(true);
+    try {
+      await sendResetEmail(email);
+      Alert.alert(
+        'Check your email',
+        'If an account exists for this email, a password reset link has been sent. Check your spam folder too.'
+      );
+    } catch (error) {
+      Alert.alert('Could not send email', friendlyAuthError(error));
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -93,6 +115,17 @@ export default function LoginScreen({ navigation }: Props) {
               secureTextEntry
               error={errors.password}
             />
+
+            <Pressable
+              onPress={handleForgotPassword}
+              disabled={resetting}
+              hitSlop={8}
+              style={styles.forgot}
+            >
+              <Text style={styles.forgotText}>
+                {resetting ? 'Sending...' : 'Forgot password?'}
+              </Text>
+            </Pressable>
 
             <AppButton
               title="Log In"
@@ -163,6 +196,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
   },
+  forgot: {
+    alignSelf: 'flex-end',
+    marginTop: -spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  forgotText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '600' },
   button: { marginTop: spacing.sm },
   footer: {
     flexDirection: 'row',

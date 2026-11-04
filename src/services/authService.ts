@@ -1,5 +1,6 @@
 import {
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -39,6 +40,11 @@ export async function signUp(name: string, email: string, password: string) {
 export async function logIn(email: string, password: string) {
   const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
   return credential.user;
+}
+
+// Sends a password reset link to the email address
+export function sendResetEmail(email: string) {
+  return sendPasswordResetEmail(auth, email.trim());
 }
 
 export async function logOut() {
